@@ -1,0 +1,12 @@
+[
+  { "country": "DE", "name": "Germany", "vat": 19 },
+  { "country": "AT", "name": "Austria", "vat": 20 },
+  { "country": "FR", "name": "France", "vat": 20 },
+  { "country": "NL", "name": "Netherlands", "vat": 21 },
+  { "country": "IT", "name": "Italy", "vat": 22 },
+  { "country": "ES", "name": "Spain", "vat": 21 },
+  { "country": "BE", "name": "Belgium", "vat": 21 },
+  { "country": "CH", "name": "Switzerland", "vat": 8.1 },
+  { "country": "DK", "name": "Denmark", "vat": 25 },
+  { "country": "SE", "name": "Sweden", "vat": 25 }
+]
