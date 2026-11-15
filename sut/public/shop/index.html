@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Shop | Summit Supply Co.</title><link rel="stylesheet" href="/assets/base.css"></head>
+<body>
+<main>
+  <h1 data-testid="page-title">All products</h1>
+  <div class="row card" role="search">
+    <div><label for="search">Search</label><input id="search" type="search" placeholder="Search by name or SKU" data-testid="search"></div>
+    <div><label for="category">Category</label>
+      <select id="category" data-testid="category-filter"><option value="">All</option><option>Footwear</option><option>Apparel</option><option>Accessories</option></select></div>
+    <div><label for="sort">Sort by</label>
+      <select id="sort" data-testid="sort"><option value="">Featured</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option><option value="name-asc">Name: A-Z</option><option value="name-desc">Name: Z-A</option><option value="rating">Top rated</option></select></div>
+    <div><label><input type="checkbox" id="in-stock" data-testid="in-stock" style="width:auto"> In stock only</label></div>
+  </div>
+  <p class="muted" data-testid="result-count" aria-live="polite"></p>
+  <div class="spinner" data-testid="loading"></div>
+  <div class="grid" data-testid="product-grid"></div>
+  <p class="hidden" data-testid="empty-state">No products match your search.</p>
+  <div role="status" class="alert success hidden" data-testid="toast"></div>
+</main>
+<script type="module">
+  import { api, money, cart, renderHeader } from './app.js';
+  renderHeader();
+  const $ = (s) => document.querySelector(s);
+  const params = new URLSearchParams(location.search);
+  $('#category').value = params.get('category') || '';
+  $('#search').value = params.get('q') || '';
+  let timer;
+  async function load() {
+    $('[data-testid="loading"]').classList.remove('hidden');
+    const qs = new URLSearchParams();
+    if ($('#search').value) qs.set('q', $('#search').value);
+    if ($('#category').value) qs.set('category', $('#category').value);
+    if ($('#sort').value) qs.set('sort', $('#sort').value);
+    if ($('#in-stock').checked) qs.set('inStock', 'true');
+    const data = await api('/api/shop/products?' + qs);
+    $('[data-testid="loading"]').classList.add('hidden');
+    $('[data-testid="page-title"]').textContent = $('#category').value || 'All products';
+    $('[data-testid="result-count"]').textContent = `${data.total} product${data.total === 1 ? '' : 's'}`;
+    $('[data-testid="empty-state"]').classList.toggle('hidden', data.total > 0);
+    $('[data-testid="product-grid"]').innerHTML = data.items.map((p) => `
+      <article class="card" data-testid="product-card" data-sku="${p.sku}">
+        <h3 data-testid="product-name"><a href="/shop/product.html?id=${p.id}">${p.name}</a></h3>
+        <p class="muted">${p.category} · ★ ${p.rating}</p>
+        <p data-testid="product-price" data-value="${p.price}">${money(p.price)}</p>
+        <p class="muted" data-testid="stock">${p.stock === 0 ? 'Out of stock' : p.stock < 5 ? `Only ${p.stock} left` : 'In stock'}</p>
+        <button class="btn" data-testid="add-to-cart" data-id="${p.id}" data-size="${p.sizes[0]}" ${p.stock === 0 ? 'disabled' : ''}>Add to cart</button>
+      </article>`).join('');
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-testid="add-to-cart"]');
+    if (!b) return;
+    cart.add(Number(b.dataset.id), b.dataset.size, 1);
+    const t = $('[data-testid="toast"]');
+    t.textContent = 'Added to cart';
+    t.classList.remove('hidden');
+    setTimeout(() => t.classList.add('hidden'), 2000);
+  });
+  $('#search').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 300); });
+  ['#category', '#sort', '#in-stock'].forEach((s) => $(s).addEventListener('change', load));
+  load();
+</script>
+</body>
+</html>

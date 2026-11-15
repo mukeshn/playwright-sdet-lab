@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lightning CRM</title>
+<style>body{margin:0;background:#f3f2f2;font-family:system-ui,sans-serif}</style></head>
+<body>
+<crm-app></crm-app>
+<script type="module">
+  import './lightning.js';
+  const API = '/services/data/v60.0';
+  const sid = sessionStorage.getItem('sid');
+  if (!sid) location.href = '/crm/login.html';
+  async function sf(path, opts = {}) {
+    const res = await fetch(path.startsWith('/services') ? path : API + path, { ...opts, headers: { authorization: `Bearer ${sid}`, 'content-type': 'application/json' }, body: opts.body ? JSON.stringify(opts.body) : undefined });
+    if (res.status === 401) { location.href = '/crm/login.html'; return; }
+    const data = res.status === 204 ? null : await res.json();
+    if (!res.ok) throw Object.assign(new Error(data?.[0]?.message || 'Request failed'), { data, status: res.status });
+    return data;
+  }
+  const STAGES = ['Prospecting', 'Qualification', 'Needs Analysis', 'Proposal/Price Quote', 'Negotiation/Review', 'Closed Won', 'Closed Lost'];
+  const STATUS = ['Open - Not Contacted', 'Working - Contacted', 'Closed - Not Converted'];
+
+  class CrmApp extends HTMLElement {
+    constructor() { super(); this.attachShadow({ mode: 'open' }); }
+    connectedCallback() {
+      this.shadowRoot.innerHTML = `<style>
+        header{background:#fff;border-bottom:3px solid #0176d3;display:flex;align-items:center;gap:1.5rem;padding:.6rem 1rem}
+        header strong{color:#0176d3} nav a{color:#181818;text-decoration:none;padding:.5rem .25rem;font-size:.9rem} nav a[aria-current="page"]{border-bottom:3px solid #0176d3}
+        main{padding:1rem} .card{background:#fff;border:1px solid #ddd;border-radius:4px;padding:1rem;margin-bottom:1rem}
+        .head{display:flex;justify-content:space-between;align-items:center} h1{font-size:1.2rem;margin:.2rem 0}
+        .modal-backdrop{position:fixed;inset:0;background:rgba(8,7,7,.6);display:flex;align-items:flex-start;justify-content:center;padding-top:5vh}
+        .modal{background:#fff;width:min(640px,95vw);border-radius:4px} .modal header{border:0;border-bottom:1px solid #ddd;justify-content:center} .modal .body{padding:1rem;display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
+        .modal footer{display:flex;justify-content:flex-end;gap:.5rem;padding:.75rem 1rem;background:#f3f3f3}
+        dl{display:grid;grid-template-columns:160px 1fr;gap:.4rem} dt{color:#706e6b;font-size:.8rem} dd{margin:0}
+        .errors{grid-column:1/-1;color:#ba0517;font-size:.85rem} iframe{width:100%;height:260px;border:1px solid #ddd}
+        input[type=search]{padding:.4rem;border:1px solid #c9c9c9;border-radius:4px}
+      </style>
+      <header><strong>Sales</strong><nav aria-label="Global">
+        <a href="#/lightning/o/Lead/list" data-nav="Lead">Leads</a>
+        <a href="#/lightning/o/Opportunity/list" data-nav="Opportunity">Opportunities</a>
+        <a href="#/lightning/o/Account/list" data-nav="Account">Accounts</a></nav></header>
+      <main id="outlet"></main>
+      <crm-toast></crm-toast>`;
+      window.addEventListener('hashchange', () => this.route());
+      this.route();
+    }
+    get toast() { return this.shadowRoot.querySelector('crm-toast'); }
+    $(s) { return this.shadowRoot.querySelector(s); }
+    async route() {
+      const [, , kind, type, id] = (location.hash.replace('#', '') || '/lightning/o/Lead/list').split('/');
+      this.shadowRoot.querySelectorAll('nav a').forEach((a) => a.toggleAttribute('aria-current', a.dataset.nav === type) && a.setAttribute('aria-current', 'page'));
+      if (kind === 'o') return this.list(type);
+      if (kind === 'r') return this.record(type, id);
+    }
+    async list(type) {
+      const cfg = {
+        Lead: { title: 'Leads', soql: 'SELECT Id, FirstName, LastName, Company, Email, Status FROM Lead WHERE IsConverted = false ORDER BY LastName', columns: [{ label: 'Name', fieldName: 'Name', type: 'link', href: (r) => `#/lightning/r/Lead/${r.Id}/view` }, { label: 'Company', fieldName: 'Company' }, { label: 'Email', fieldName: 'Email' }, { label: 'Lead Status', fieldName: 'Status' }], actions: ['Edit', 'Delete'] },
+        Opportunity: { title: 'Opportunities', soql: 'SELECT Id, Name, StageName, Amount, CloseDate FROM Opportunity ORDER BY CloseDate', columns: [{ label: 'Opportunity Name', fieldName: 'Name', type: 'link', href: (r) => `#/lightning/r/Opportunity/${r.Id}/view` }, { label: 'Stage', fieldName: 'StageName' }, { label: 'Amount', fieldName: 'Amount', type: 'currency' }, { label: 'Close Date', fieldName: 'CloseDate' }], actions: ['Delete'] },
+        Account: { title: 'Accounts', soql: 'SELECT Id, Name, Industry, BillingCountry FROM Account ORDER BY Name', columns: [{ label: 'Account Name', fieldName: 'Name' }, { label: 'Industry', fieldName: 'Industry' }, { label: 'Billing Country', fieldName: 'BillingCountry' }], actions: [] },
+      }[type];
+      this.$('#outlet').innerHTML = `<div class="card"><div class="head"><div><span style="font-size:.8rem;color:#706e6b">${cfg.title}</span><h1>All ${cfg.title}</h1></div>
+        <div><input type="search" placeholder="Search this list..." aria-label="Search this list" data-list-search>
+        ${type !== 'Account' ? `<lightning-button label="New" data-new></lightning-button>` : ''}</div></div></div>
+        <lightning-datatable label="${cfg.title}"></lightning-datatable>`;
+      const { records } = await sf('/query?q=' + encodeURIComponent(cfg.soql));
+      const rows = records.map((r) => ({ ...r, Name: r.Name ?? [r.FirstName, r.LastName].filter(Boolean).join(' ') }));
+      const table = this.$('lightning-datatable');
+      table.config = { columns: cfg.columns, data: rows, rowActions: cfg.actions };
+      this.$('[data-list-search]').addEventListener('input', (e) => { const q = e.target.value.toLowerCase(); table.config = { columns: cfg.columns, data: rows.filter((r) => Object.values(r).some((v) => String(v ?? '').toLowerCase().includes(q))), rowActions: cfg.actions }; });
+      table.addEventListener('rowaction', async (e) => {
+        const { action, row } = e.detail;
+        if (action === 'Delete') { await sf(`/sobjects/${type}/${row.Id}`, { method: 'DELETE' }); this.toast.show({ message: `${type} "${row.Name}" was deleted.` }); this.list(type); }
+        if (action === 'Edit') this.openForm(type, row);
+      });
+      this.$('[data-new]')?.addEventListener('click', () => this.openForm(type));
+    }
+    openForm(type, existing) {
+      const fields = type === 'Lead'
+        ? `<lightning-input label="First Name" name="FirstName"></lightning-input><lightning-input label="Last Name" name="LastName" required></lightning-input>
+           <lightning-input label="Company" name="Company" required></lightning-input><lightning-input label="Email" name="Email" type="email"></lightning-input>
+           <lightning-combobox label="Lead Status" name="Status" options='${JSON.stringify(STATUS)}'></lightning-combobox>`
+        : `<lightning-input label="Opportunity Name" name="Name" required></lightning-input><lightning-input label="Amount" name="Amount" type="number"></lightning-input>
+           <lightning-input label="Close Date" name="CloseDate" type="date" required></lightning-input>
+           <lightning-combobox label="Stage" name="StageName" options='${JSON.stringify(STAGES)}'></lightning-combobox>`;
+      const wrap = document.createElement('div');
+      wrap.className = 'modal-backdrop';
+      wrap.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header><h2 id="modal-title">${existing ? 'Edit' : 'New'} ${type}</h2></header>
+        <div class="body">${fields}<div class="errors" role="alert" data-form-errors></div></div>
+        <footer><lightning-button label="Cancel" data-cancel></lightning-button><lightning-button label="Save" variant="brand" data-save></lightning-button></footer></section>`;
+      this.shadowRoot.append(wrap);
+      if (existing) wrap.querySelectorAll('lightning-input, lightning-combobox').forEach((el) => { if (existing[el.name] != null) el.value = existing[el.name]; });
+      wrap.querySelector('[data-cancel]').addEventListener('click', () => wrap.remove());
+      wrap.querySelector('[data-save]').addEventListener('click', async () => {
+        const inputs = [...wrap.querySelectorAll('lightning-input, lightning-combobox')];
+        if (!inputs.filter((i) => i.reportValidity).map((i) => i.reportValidity()).every(Boolean)) { wrap.querySelector('[data-form-errors]').textContent = 'We hit a snag. Review the errors on this page.'; return; }
+        const body = Object.fromEntries(inputs.filter((i) => i.value !== '').map((i) => [i.name, i.name === 'Amount' ? Number(i.value) : i.value]));
+        try {
+          if (existing) { await sf(`/sobjects/${type}/${existing.Id}`, { method: 'PATCH', body }); wrap.remove(); this.toast.show({ message: `${type} "${body.Name || [body.FirstName, body.LastName].filter(Boolean).join(' ')}" was saved.` }); this.route(); return; }
+          const r = await sf(`/sobjects/${type}`, { method: 'POST', body });
+          wrap.remove();
+          this.toast.show({ message: `${type} "${body.Name || [body.FirstName, body.LastName].filter(Boolean).join(' ')}" was created.` });
+          location.hash = `#/lightning/r/${type}/${r.id}/view`;
+        } catch (ex) { wrap.querySelector('[data-form-errors]').textContent = ex.message; }
+      });
+    }
+    async record(type, id) {
+      const r = await sf(`/sobjects/${type}/${id}`);
+      const name = r.Name ?? [r.FirstName, r.LastName].filter(Boolean).join(' ');
+      const fields = Object.entries(r).filter(([k]) => !['attributes', 'Id'].includes(k));
+      this.$('#outlet').innerHTML = `<div class="card"><div class="head"><div><span style="font-size:.8rem;color:#706e6b">${type}</span><h1 data-record-name>${name}</h1></div>
+        <div>${type === 'Lead' && !r.IsConverted ? '<lightning-button label="Convert" data-convert></lightning-button>' : ''}<lightning-button label="Delete" variant="destructive" data-delete></lightning-button></div></div></div>
+        ${type === 'Opportunity' ? '<div class="card"><lightning-path></lightning-path></div>' : ''}
+        <div class="card"><h2 style="font-size:1rem">Details</h2><dl data-details>${fields.map(([k, v]) => `<dt>${k}</dt><dd data-field="${k}">${v ?? ''}</dd>`).join('')}</dl></div>
+        ${type === 'Opportunity' ? `<div class="card"><h2 style="font-size:1rem">Quote Calculator (Visualforce)</h2><iframe title="Quote Calculator" name="vfFrame0" src="/crm/vf/quote.html?amount=${r.Amount ?? 0}"></iframe></div>` : ''}`;
+      if (type === 'Opportunity') {
+        const path = this.$('lightning-path');
+        path.stages = { stages: STAGES, current: r.StageName };
+        path.addEventListener('stagechange', async (e) => {
+          await sf(`/sobjects/Opportunity/${id}`, { method: 'PATCH', body: { StageName: e.detail.stage } });
+          this.toast.show({ message: 'Stage changed successfully.' });
+          this.record(type, id);
+        });
+      }
+      this.$('[data-delete]').addEventListener('click', async () => { await sf(`/sobjects/${type}/${id}`, { method: 'DELETE' }); this.toast.show({ message: `${type} "${name}" was deleted.` }); location.hash = `#/lightning/o/${type}/list`; });
+      this.$('[data-convert]')?.addEventListener('click', async () => {
+        const out = await sf(`/services/apexrest/LeadConvert/${id}`, { method: 'POST', body: {} });
+        this.toast.show({ title: 'Your lead has been converted', message: `${r.Company}` });
+        location.hash = `#/lightning/r/Opportunity/${out.opportunityId}/view`;
+      });
+    }
+  }
+  customElements.define('crm-app', CrmApp);
+</script>
+</body>
+</html>

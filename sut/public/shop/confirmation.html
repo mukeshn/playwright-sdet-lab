@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Order confirmed | Summit Supply Co.</title><link rel="stylesheet" href="/assets/base.css"></head>
+<body>
+<main>
+  <section class="card">
+    <h1 data-testid="confirmation-title">Thank you for your order!</h1>
+    <p>Order number: <strong data-testid="order-id"></strong></p>
+    <p>Status: <span data-testid="order-status"></span></p>
+    <p>Total paid: <strong data-testid="order-total"></strong></p>
+    <p>A confirmation was sent to <span data-testid="order-email"></span>.</p>
+    <a class="btn" href="/shop/index.html" data-testid="continue-shopping">Continue shopping</a>
+  </section>
+</main>
+<script type="module">
+  import { api, money, renderHeader } from './app.js';
+  renderHeader();
+  const id = new URLSearchParams(location.search).get('order');
+  const o = await api('/api/shop/orders/' + id);
+  document.querySelector('[data-testid="order-id"]').textContent = o.id;
+  document.querySelector('[data-testid="order-status"]').textContent = o.status;
+  document.querySelector('[data-testid="order-total"]').textContent = money(o.total);
+  document.querySelector('[data-testid="order-email"]').textContent = o.customer.email;
+</script>
+</body>
+</html>

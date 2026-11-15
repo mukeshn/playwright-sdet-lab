@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Login | Lightning CRM</title><link rel="stylesheet" href="/assets/base.css">
+<style>body{background:#f3f2f2} .login{max-width:380px;margin:4rem auto;background:#fff;border:1px solid #ddd;border-radius:4px;padding:1.5rem}</style></head>
+<body>
+  <div class="login">
+    <h1 style="color:#0176d3">Lightning CRM</h1>
+    <form id="login" novalidate>
+      <label for="username">Username</label><input id="username" name="username" type="email">
+      <label for="password">Password</label><input id="password" name="password" type="password">
+      <div id="error" class="alert error hidden" role="alert"></div>
+      <p><input type="submit" id="Login" class="btn" value="Log In" style="width:100%"></p>
+    </form>
+  </div>
+<script type="module">
+  const f = document.getElementById('login');
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const res = await fetch('/crm/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: f.username.value, password: f.password.value }) });
+    const data = await res.json();
+    if (!res.ok) { const el = document.getElementById('error'); el.textContent = data.message; el.classList.remove('hidden'); return; }
+    sessionStorage.setItem('sid', data.sessionId);
+    location.href = '/crm/index.html#/lightning/o/Lead/list';
+  });
+</script>
+</body>
+</html>

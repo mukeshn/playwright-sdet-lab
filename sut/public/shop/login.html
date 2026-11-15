@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in | Summit Supply Co.</title><link rel="stylesheet" href="/assets/base.css"></head>
+<body>
+<main>
+  <section class="card" style="max-width:420px;margin:2rem auto">
+    <h1>Sign in</h1>
+    <form id="login-form" novalidate>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" data-testid="email">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" data-testid="password">
+      <div role="alert" class="alert error hidden" data-testid="login-error"></div>
+      <p><button class="btn" type="submit" data-testid="login-submit">Sign in</button></p>
+      <p class="muted">Continue as <a href="/shop/index.html" data-testid="guest-link">guest</a></p>
+    </form>
+  </section>
+</main>
+<script type="module">
+  import { api, session, renderHeader } from './app.js';
+  renderHeader();
+  const form = document.getElementById('login-form');
+  const err = document.querySelector('[data-testid="login-error"]');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.classList.add('hidden');
+    const email = form.email.value.trim(), password = form.password.value;
+    if (!email || !password) { err.textContent = 'Email and password are required.'; err.classList.remove('hidden'); return; }
+    try {
+      const s = await api('/api/shop/auth/login', { method: 'POST', body: { email, password } });
+      session.set(s);
+      location.href = new URLSearchParams(location.search).get('returnTo') || '/shop/index.html';
+    } catch (ex) {
+      err.textContent = ex.status === 423 ? 'Your account is locked. Please contact customer service.' : 'Email or password is incorrect.';
+      err.classList.remove('hidden');
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Product | Summit Supply Co.</title><link rel="stylesheet" href="/assets/base.css"></head>
+<body>
+<main>
+  <nav class="muted" aria-label="Breadcrumb" data-testid="breadcrumb"></nav>
+  <section class="card" data-testid="pdp">
+    <h1 data-testid="pdp-name"></h1>
+    <p data-testid="pdp-sku" class="muted"></p>
+    <p data-testid="pdp-price" style="font-size:1.4rem"></p>
+    <p data-testid="pdp-description"></p>
+    <div class="row">
+      <div><label for="size">Size</label><select id="size" data-testid="size"></select></div>
+      <div><label for="qty">Quantity</label><input id="qty" type="number" min="1" value="1" data-testid="qty"></div>
+    </div>
+    <p class="error hidden" data-testid="pdp-error" role="alert"></p>
+    <p><button class="btn" data-testid="pdp-add">Add to cart</button></p>
+  </section>
+  <p class="hidden alert error" data-testid="not-found">Product not found.</p>
+</main>
+<script type="module">
+  import { api, money, cart, renderHeader } from './app.js';
+  renderHeader();
+  const $ = (s) => document.querySelector(s);
+  const id = Number(new URLSearchParams(location.search).get('id'));
+  try {
+    const p = await api('/api/shop/products/' + id);
+    document.title = `${p.name} | Summit Supply Co.`;
+    $('[data-testid="breadcrumb"]').innerHTML = `<a href="/shop/index.html">Shop</a> / <a href="/shop/index.html?category=${p.category}">${p.category}</a> / ${p.name}`;
+    $('[data-testid="pdp-name"]').textContent = p.name;
+    $('[data-testid="pdp-sku"]').textContent = p.sku;
+    $('[data-testid="pdp-price"]').textContent = money(p.price);
+    $('[data-testid="pdp-description"]').textContent = p.description;
+    $('#size').innerHTML = p.sizes.map((s) => `<option>${s}</option>`).join('');
+    $('[data-testid="pdp-add"]').disabled = p.stock === 0;
+    $('[data-testid="pdp-add"]').addEventListener('click', () => {
+      const q = Number($('#qty').value);
+      const err = $('[data-testid="pdp-error"]');
+      if (!Number.isInteger(q) || q < 1) { err.textContent = 'Quantity must be at least 1.'; err.classList.remove('hidden'); return; }
+      const inCart = cart.read().filter((i) => i.productId === p.id).reduce((s, i) => s + i.quantity, 0);
+      if (q + inCart > p.stock) { err.textContent = `Only ${p.stock} available.`; err.classList.remove('hidden'); return; }
+      err.classList.add('hidden');
+      cart.add(p.id, $('#size').value, q);
+    });
+  } catch {
+    $('[data-testid="pdp"]').classList.add('hidden');
+    $('[data-testid="not-found"]').classList.remove('hidden');
+  }
+</script>
+</body>
+</html>

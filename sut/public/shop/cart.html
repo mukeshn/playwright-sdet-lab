@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cart | Summit Supply Co.</title><link rel="stylesheet" href="/assets/base.css"></head>
+<body>
+<main>
+  <h1>Your cart</h1>
+  <p class="hidden" data-testid="cart-empty">Your cart is empty. <a href="/shop/index.html">Continue shopping</a></p>
+  <table data-testid="cart-table"><thead><tr><th>Product</th><th>Size</th><th>Qty</th><th>Price</th><th></th></tr></thead><tbody></tbody></table>
+  <div class="row" style="margin-top:1rem">
+    <section class="card">
+      <label for="country">Ship to</label>
+      <select id="country" data-testid="country"><option value="DE">Germany</option><option value="AT">Austria</option><option value="FR">France</option><option value="NL">Netherlands</option><option value="IT">Italy</option><option value="ES">Spain</option><option value="BE">Belgium</option><option value="CH">Switzerland</option><option value="DK">Denmark</option><option value="SE">Sweden</option></select>
+      <label for="promo">Promo code</label>
+      <div style="display:flex;gap:.5rem"><input id="promo" data-testid="promo-input"><button class="btn secondary" data-testid="promo-apply">Apply</button></div>
+      <p data-testid="promo-message" role="status" class="muted"></p>
+    </section>
+    <section class="card" data-testid="summary">
+      <p>Subtotal: <strong data-testid="subtotal"></strong></p>
+      <p>Discount: <strong data-testid="discount"></strong></p>
+      <p>Shipping: <strong data-testid="shipping"></strong></p>
+      <p>VAT (<span data-testid="vat-rate"></span>%): <strong data-testid="vat"></strong></p>
+      <p style="font-size:1.2rem">Total: <strong data-testid="total"></strong></p>
+      <a class="btn" href="/shop/checkout.html" data-testid="checkout">Proceed to checkout</a>
+    </section>
+  </div>
+</main>
+<script type="module">
+  import { api, money, cart, renderHeader } from './app.js';
+  renderHeader();
+  const $ = (s) => document.querySelector(s);
+  const state = JSON.parse(sessionStorage.getItem('summit.checkout') || '{}');
+  $('#country').value = state.country || 'DE';
+  $('#promo').value = state.promo || '';
+  async function render() {
+    const items = cart.read();
+    $('[data-testid="cart-empty"]').classList.toggle('hidden', items.length > 0);
+    $('[data-testid="cart-table"]').classList.toggle('hidden', items.length === 0);
+    $('[data-testid="summary"]').classList.toggle('hidden', items.length === 0);
+    const pricing = await api('/api/shop/pricing', { method: 'POST', body: { items, country: $('#country').value, promo: state.promo } });
+    $('tbody').innerHTML = pricing.lines.map((l) => `
+      <tr data-testid="cart-row" data-sku="${l.sku}">
+        <td data-testid="line-name">${l.name}</td><td>${l.size}</td>
+        <td><input type="number" min="0" value="${l.quantity}" style="width:5rem" data-testid="line-qty" data-id="${l.productId}" data-size="${l.size}" aria-label="Quantity for ${l.name}"></td>
+        <td data-testid="line-total">${money(l.lineTotal)}</td>
+        <td><button class="btn secondary" data-testid="line-remove" data-id="${l.productId}" data-size="${l.size}">Remove</button></td>
+      </tr>`).join('');
+    $('[data-testid="subtotal"]').textContent = money(pricing.subtotal);
+    $('[data-testid="discount"]').textContent = '-' + money(pricing.discount);
+    $('[data-testid="shipping"]').textContent = pricing.shipping === 0 ? 'Free' : money(pricing.shipping);
+    $('[data-testid="vat-rate"]').textContent = pricing.vatRate;
+    $('[data-testid="vat"]').textContent = money(pricing.vat);
+    $('[data-testid="total"]').textContent = money(pricing.total);
+    $('[data-testid="total"]').dataset.value = pricing.total;
+  }
+  const save = () => sessionStorage.setItem('summit.checkout', JSON.stringify(state));
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('[data-testid="line-qty"]')) { cart.setQty(Number(e.target.dataset.id), e.target.dataset.size, Number(e.target.value)); render(); }
+    if (e.target.id === 'country') { state.country = e.target.value; save(); render(); }
+  });
+  document.addEventListener('click', async (e) => {
+    const rm = e.target.closest('[data-testid="line-remove"]');
+    if (rm) { cart.remove(Number(rm.dataset.id), rm.dataset.size); render(); }
+    if (e.target.matches('[data-testid="promo-apply"]')) {
+      const code = $('#promo').value.trim().toUpperCase();
+      const valid = ['SAVE10', 'WELCOME5', 'FREESHIP'];
+      const msg = $('[data-testid="promo-message"]');
+      if (!valid.includes(code)) { msg.textContent = `Promo code "${code}" is not valid.`; msg.className = 'error'; state.promo = undefined; }
+      else { msg.textContent = `Promo code ${code} applied.`; msg.className = 'muted'; state.promo = code; }
+      save(); render();
+    }
+  });
+  render();
+</script>
+</body>
+</html>

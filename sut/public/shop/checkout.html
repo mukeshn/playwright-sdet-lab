@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Checkout | Summit Supply Co.</title><link rel="stylesheet" href="/assets/base.css"></head>
+<body>
+<main>
+  <h1>Checkout</h1>
+  <form id="checkout" class="card" novalidate>
+    <fieldset style="border:0;padding:0"><legend><strong>Contact &amp; shipping</strong></legend>
+      <label for="email">Email</label><input id="email" name="email" type="email" data-testid="email"><span class="error" data-error-for="email"></span>
+      <div class="row">
+        <div><label for="firstName">First name</label><input id="firstName" name="firstName" data-testid="first-name"><span class="error" data-error-for="firstName"></span></div>
+        <div><label for="lastName">Last name</label><input id="lastName" name="lastName" data-testid="last-name"><span class="error" data-error-for="lastName"></span></div>
+      </div>
+      <label for="street">Street and number</label><input id="street" name="street" data-testid="street"><span class="error" data-error-for="street"></span>
+      <div class="row">
+        <div><label for="postcode">Postcode</label><input id="postcode" name="postcode" inputmode="numeric" data-testid="postcode"><span class="error" data-error-for="postcode"></span></div>
+        <div><label for="city">City</label><input id="city" name="city" data-testid="city"></div>
+        <div><label for="country">Country</label><select id="country" name="country" data-testid="country"><option value="DE">Germany</option><option value="AT">Austria</option><option value="FR">France</option><option value="NL">Netherlands</option><option value="IT">Italy</option><option value="ES">Spain</option><option value="BE">Belgium</option><option value="CH">Switzerland</option><option value="DK">Denmark</option><option value="SE">Sweden</option></select></div>
+      </div>
+    </fieldset>
+    <fieldset style="border:0;padding:0;margin-top:1rem"><legend><strong>Payment</strong></legend>
+      <label><input type="radio" name="payment" value="card" checked style="width:auto" data-testid="pay-card"> Credit card</label>
+      <label><input type="radio" name="payment" value="paypal" style="width:auto" data-testid="pay-paypal"> PayPal</label>
+      <label><input type="radio" name="payment" value="invoice" style="width:auto" data-testid="pay-invoice"> Invoice (registered customers only)</label>
+      <span class="error" data-error-for="payment"></span>
+    </fieldset>
+    <label style="margin-top:1rem"><input type="checkbox" id="terms" style="width:auto" data-testid="terms"> I accept the terms and conditions</label>
+    <span class="error" data-error-for="terms"></span>
+    <div role="alert" class="alert error hidden" data-testid="checkout-error"></div>
+    <p>Order total: <strong data-testid="checkout-total"></strong></p>
+    <button class="btn" type="submit" data-testid="place-order">Place order</button>
+  </form>
+</main>
+<script type="module">
+  import { api, money, cart, session, renderHeader } from './app.js';
+  renderHeader();
+  const f = document.getElementById('checkout');
+  const state = JSON.parse(sessionStorage.getItem('summit.checkout') || '{}');
+  const s = session.get();
+  if (s) f.email.value = s.user.email;
+  f.country.value = state.country || 'DE';
+  if (cart.read().length === 0) location.href = '/shop/cart.html';
+  const total = async () => {
+    const p = await api('/api/shop/pricing', { method: 'POST', body: { items: cart.read(), country: f.country.value, promo: state.promo } });
+    document.querySelector('[data-testid="checkout-total"]').textContent = money(p.total);
+  };
+  f.country.addEventListener('change', total);
+  total();
+  const setErr = (name, msg) => { const el = f.querySelector(`[data-error-for="${name}"]`); el.textContent = msg || ''; const input = f.elements[name]; if (input?.setAttribute) input.setAttribute('aria-invalid', msg ? 'true' : 'false'); };
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(f));
+    let ok = true;
+    const check = (name, cond, msg) => { setErr(name, cond ? '' : msg); ok = ok && cond; };
+    check('email', /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email), 'Enter a valid email address.');
+    check('firstName', !!v.firstName.trim(), 'First name is required.');
+    check('lastName', !!v.lastName.trim(), 'Last name is required.');
+    check('street', !!v.street.trim(), 'Street is required.');
+    check('postcode', /^\d{4,5}$/.test(v.postcode), 'Postcode must have 4 or 5 digits.');
+    check('payment', v.payment !== 'invoice' || !!s, 'Invoice is only available for registered customers.');
+    check('terms', document.getElementById('terms').checked, 'Please accept the terms.');
+    if (!ok) return;
+    const btn = document.querySelector('[data-testid="place-order"]');
+    btn.disabled = true; btn.textContent = 'Placing order…';
+    try {
+      const order = await api('/api/shop/orders', { method: 'POST', body: { customer: { email: v.email, firstName: v.firstName, lastName: v.lastName, street: v.street, postcode: v.postcode, city: v.city, country: v.country }, items: cart.read(), paymentMethod: v.payment, promo: state.promo } });
+      cart.clear(); sessionStorage.removeItem('summit.checkout');
+      location.href = '/shop/confirmation.html?order=' + order.id;
+    } catch (ex) {
+      const el = document.querySelector('[data-testid="checkout-error"]');
+      el.textContent = ex.status === 409 ? 'Sorry, one of the items is no longer available in that quantity.' : 'We could not place your order. Please try again.';
+      el.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Place order';
+    }
+  });
+</script>
+</body>
+</html>
