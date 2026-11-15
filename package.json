@@ -1,0 +1,27 @@
+{
+  "name": "playwright-sdet-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "16 focused Playwright + TypeScript projects across e-commerce, retail, banking, Salesforce and SAP",
+  "author": "Mukesh Ningadali",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "sut": "node sut/server.mjs",
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep @smoke",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
+}
